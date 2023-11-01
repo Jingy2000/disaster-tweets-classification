@@ -44,6 +44,5 @@ class DisasterTweetDataset(Dataset):
         return item
 
 
-
 if __name__ == "__main__":
     print(EPOCH)
