@@ -68,11 +68,10 @@ def train(model, dataframe, device, epochs=EPOCH, batch_size=BATCH_SIZE, learnin
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = AdamW(model.parameters(), lr=learning_rate)
-    warm_up_ratio = 0.1
-    # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warm_up_ratio * epochs * len(train_loader),
-    #                                             num_training_steps=epochs * len(train_loader))
-    scheduler = get_constant_schedule(optimizer)
+    optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=WEIGHT_DECAY)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=WARM_UP_RATIO * epochs * len(train_loader),
+                                                num_training_steps=epochs * len(train_loader))
+    # scheduler = get_constant_schedule(optimizer)
 
     writer = SummaryWriter()
 
@@ -82,12 +81,12 @@ def train(model, dataframe, device, epochs=EPOCH, batch_size=BATCH_SIZE, learnin
                                                                                         optimizer, criterion, scheduler)
         # Collect training metrics and log into tensorboard
         precision, recall, f1, auc = compute_metrics(train_true_labels, train_predictions, train_probs)
-        writer.add_scalar("Training/Loss", total_loss / len(train_loader), epoch)
+        writer.add_scalar("Training/Loss", total_loss / len(train_loader.dataset), epoch)
         writer.add_scalar('Training/Precision', precision, epoch)
         writer.add_scalar('Training/Recall', recall, epoch)
         writer.add_scalar('Training/F1', f1, epoch)
         writer.add_scalar('Training/AUC', auc, epoch)
-        print(f"Epoch {epoch + 1} - Training Loss: {total_loss / len(train_loader)}")
+        print(f"Epoch {epoch + 1} - Training Loss: {total_loss / len(train_loader.dataset)}")
         print(f"Epoch {epoch + 1} - Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
 
     print("Training complete.")
@@ -96,7 +95,7 @@ def train(model, dataframe, device, epochs=EPOCH, batch_size=BATCH_SIZE, learnin
 
 
 def train_validation(model_class, dataframe, device, epochs=EPOCH, batch_size=BATCH_SIZE, learning_rate=LR):
-    criterion = torch.nn.CrossEntropyLoss().to(device)
+    criterion = torch.nn.CrossEntropyLoss(reduction='sum').to(device)
 
     writer = SummaryWriter()
 
@@ -111,10 +110,6 @@ def train_validation(model_class, dataframe, device, epochs=EPOCH, batch_size=BA
         # initialize model
         model = model_class()
         model.to(device)
-        optimizer = AdamW(model.parameters(), lr=learning_rate)
-        # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warm_up_ratio * epochs * len(train_loader),
-        #                                             num_training_steps=epochs * len(train_loader))
-        scheduler = get_constant_schedule(optimizer)
 
         # training and validation set
         train_df = dataframe.iloc[train_idx]
@@ -123,6 +118,12 @@ def train_validation(model_class, dataframe, device, epochs=EPOCH, batch_size=BA
         train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_dataset = DisasterTweetDataset(val_df)
         val_loader = DataLoader(val_dataset, batch_size=batch_size)
+
+        optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=WEIGHT_DECAY)
+        scheduler = get_linear_schedule_with_warmup(optimizer,
+                                                    num_warmup_steps=WARM_UP_RATIO * epochs * len(train_loader),
+                                                    num_training_steps=epochs * len(train_loader))
+        # scheduler = get_constant_schedule(optimizer)
 
         # start training
         folds_metrics: dict[str, dict[str, float]] = defaultdict(dict)
@@ -135,13 +136,13 @@ def train_validation(model_class, dataframe, device, epochs=EPOCH, batch_size=BA
                                                                                             criterion, scheduler)
             precision, recall, f1, auc = compute_metrics(train_true_labels, train_predictions, train_probs)
             # Collect training metrics for this fold
-            folds_metrics["Training/Loss"][f"fold {fold}"] = total_loss / batch_size
-            folds_metrics["Training/Precision"][f"fold {fold}"] = precision
-            folds_metrics["Training/Recall"][f"fold {fold}"] = recall
-            folds_metrics["Training/F1"][f"fold {fold}"] = f1
-            folds_metrics["Training/AUC"][f"fold {fold}"] = auc
+            folds_metrics["Training/Loss"][f"fold {fold + 1}"] = total_loss / len(train_loader.dataset)
+            folds_metrics["Training/Precision"][f"fold {fold + 1}"] = precision
+            folds_metrics["Training/Recall"][f"fold {fold + 1}"] = recall
+            folds_metrics["Training/F1"][f"fold {fold + 1}"] = f1
+            folds_metrics["Training/AUC"][f"fold {fold + 1}"] = auc
 
-            print(f"Epoch {epoch + 1} - Fold {fold + 1} - Training Loss: {total_loss / batch_size}")
+            print(f"Epoch {epoch + 1} - Fold {fold + 1} - Training Loss: {total_loss / len(train_loader.dataset)}")
             print(
                 f"Epoch {epoch + 1} - Fold {fold + 1} - Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
 
@@ -170,14 +171,14 @@ def train_validation(model_class, dataframe, device, epochs=EPOCH, batch_size=BA
                     val_probs.extend(logits.cpu().detach().numpy())
 
             precision, recall, f1, auc = compute_metrics(val_true_labels, val_predictions, val_probs)
-            folds_metrics["Validation/Loss"][f"fold {fold}"] = total_val_loss / batch_size
-            folds_metrics["Validation/Precision"][f"fold {fold}"] = precision
-            folds_metrics["Validation/Recall"][f"fold {fold}"] = recall
-            folds_metrics["Validation/F1"][f"fold {fold}"] = f1
-            folds_metrics["Validation/AUC"][f"fold {fold}"] = auc
+            folds_metrics["Validation/Loss"][f"fold {fold + 1}"] = total_val_loss / len(val_loader.dataset)
+            folds_metrics["Validation/Precision"][f"fold {fold + 1}"] = precision
+            folds_metrics["Validation/Recall"][f"fold {fold + 1}"] = recall
+            folds_metrics["Validation/F1"][f"fold {fold + 1}"] = f1
+            folds_metrics["Validation/AUC"][f"fold {fold + 1}"] = auc
 
             print(
-                f"Epoch {epoch + 1} - Fold {fold + 1} - Validation loss after epoch {epoch + 1}: {total_val_loss / batch_size:.4f}")
+                f"Epoch {epoch + 1} - Fold {fold + 1} - Validation loss after epoch {epoch + 1}: {total_val_loss / len(val_loader.dataset):.4f}")
             print(
                 f"Epoch {epoch + 1} - Fold {fold + 1} - Precision: {precision:.4f}, Recall: {recall:.4f}, F1 Score: {f1:.4f}, AUC: {auc:.4f}")
             # Log metrics to TensorBoard
@@ -194,7 +195,7 @@ def prediction(model, df_test, device):
     data_loader = DataLoader(
         test_dataset,
         shuffle=False,
-        batch_size=32
+        batch_size=BATCH_SIZE
     )
     model.eval()
     val_predictions = []
@@ -213,7 +214,7 @@ def prediction(model, df_test, device):
 
     model_submission = pd.read_csv("./data/sample_submission.csv")
     model_submission['target'] = np.array(val_predictions).astype('int')
-    model_submission.to_csv('./results/model_submission.csv', index=False)
+    model_submission.to_csv('./results/model_submission1.csv', index=False)
 
 
 def evaluation(model, df_test, device):

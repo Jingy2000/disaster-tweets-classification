@@ -11,7 +11,7 @@ df_test = pd.read_csv('./data/test_cleaned.csv', dtype={'id': np.int16})
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = BertClassifier(freeze_bert=False)
-validation_models = train_validation(BertClassifier, df_train[:100], device, epochs=1)
+validation_models = train_validation(BertClassifier, df_train, device)
 # trained_model = train(model, df_train, device)
 
 # prediction(trained_model, df_test, device)
