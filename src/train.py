@@ -34,6 +34,7 @@ def train_one_epoch(model, train_loader, epoch, device, optimizer, criterion, sc
     train_predictions = []
     train_probs = []
 
+    # batch training
     pbar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{EPOCH}", dynamic_ncols=True)
     for batch in pbar:
         optimizer.zero_grad()
@@ -94,34 +95,44 @@ def train(model, dataframe, device, epochs=EPOCH, batch_size=BATCH_SIZE, learnin
     return model
 
 
-def train_validation(model, dataframe, device, epochs=EPOCH, batch_size=BATCH_SIZE, learning_rate=LR):
-    # Load model and move it to device
-    model.to(device)
-
+def train_validation(model_class, dataframe, device, epochs=EPOCH, batch_size=BATCH_SIZE, learning_rate=LR):
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = AdamW(model.parameters(), lr=learning_rate)
 
     writer = SummaryWriter()
 
+    # stratified k fold for cross validation, use keyword to stratify
     skf = StratifiedKFold(n_splits=N_SPLITS, random_state=SEED, shuffle=True)
     folds = list(skf.split(dataframe, dataframe['keyword']))
 
-    for epoch in range(epochs):
+    # Store all trained models
+    models = []
+
+    for fold, (train_idx, val_idx) in enumerate(folds):
+        # initialize model
+        model = model_class()
+        model.to(device)
+        optimizer = AdamW(model.parameters(), lr=learning_rate)
+        # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=warm_up_ratio * epochs * len(train_loader),
+        #                                             num_training_steps=epochs * len(train_loader))
+        scheduler = get_constant_schedule(optimizer)
+
+        # training and validation set
+        train_df = dataframe.iloc[train_idx]
+        val_df = dataframe.iloc[val_idx]
+        train_dataset = DisasterTweetDataset(train_df)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_dataset = DisasterTweetDataset(val_df)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size)
+
+        # start training
         folds_metrics: dict[str, dict[str, float]] = defaultdict(dict)
-        for fold, (train_idx, val_idx) in enumerate(folds):
-            train_df = dataframe.iloc[train_idx]
-            val_df = dataframe.iloc[val_idx]
 
-            train_dataset = DisasterTweetDataset(train_df)
-            train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-
-            val_dataset = DisasterTweetDataset(val_df)
-            val_loader = DataLoader(val_dataset, batch_size=batch_size)
+        for epoch in range(epochs):
 
             train_true_labels, train_predictions, train_probs, total_loss = train_one_epoch(model, train_loader, epoch,
                                                                                             device,
                                                                                             optimizer,
-                                                                                            criterion)
+                                                                                            criterion, scheduler)
             precision, recall, f1, auc = compute_metrics(train_true_labels, train_predictions, train_probs)
             # Collect training metrics for this fold
             folds_metrics["Training/Loss"][f"fold {fold}"] = total_loss / batch_size
@@ -134,7 +145,7 @@ def train_validation(model, dataframe, device, epochs=EPOCH, batch_size=BATCH_SI
             print(
                 f"Epoch {epoch + 1} - Fold {fold + 1} - Precision: {precision:.4f}, Recall: {recall:.4f}, F1: {f1:.4f}, AUC: {auc:.4f}")
 
-            # validation loop to evaluate model on validation data after each epoch
+            # evaluate model on validation data in each epoch
             model.eval()
             total_val_loss = 0
             val_true_labels = []
@@ -159,22 +170,23 @@ def train_validation(model, dataframe, device, epochs=EPOCH, batch_size=BATCH_SI
                     val_probs.extend(logits.cpu().detach().numpy())
 
             precision, recall, f1, auc = compute_metrics(val_true_labels, val_predictions, val_probs)
-            folds_metrics["Validation/Loss"][f"fold {fold}"] = total_val_loss / len(val_loader.dataset)
+            folds_metrics["Validation/Loss"][f"fold {fold}"] = total_val_loss / batch_size
             folds_metrics["Validation/Precision"][f"fold {fold}"] = precision
             folds_metrics["Validation/Recall"][f"fold {fold}"] = recall
             folds_metrics["Validation/F1"][f"fold {fold}"] = f1
             folds_metrics["Validation/AUC"][f"fold {fold}"] = auc
 
             print(
-                f"Epoch {epoch + 1} - Fold {fold + 1} - Validation loss after epoch {epoch + 1}: {total_val_loss / len(val_loader.dataset):.4f}")
+                f"Epoch {epoch + 1} - Fold {fold + 1} - Validation loss after epoch {epoch + 1}: {total_val_loss / batch_size:.4f}")
             print(
                 f"Epoch {epoch + 1} - Fold {fold + 1} - Precision: {precision:.4f}, Recall: {recall:.4f}, F1 Score: {f1:.4f}, AUC: {auc:.4f}")
-        # Log metrics to TensorBoard
-        for tag, metric in folds_metrics.items():
-            writer.add_scalars(tag, tag_scalar_dict=metric, global_step=epoch)
+            # Log metrics to TensorBoard
+            for tag, metric in folds_metrics.items():
+                writer.add_scalars(tag, tag_scalar_dict=metric, global_step=epoch)
+        models.append(model)
     print("Training complete.")
 
-    return model
+    return models
 
 
 def prediction(model, df_test, device):

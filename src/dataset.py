@@ -8,19 +8,20 @@ from src.config import *
 class DisasterTweetDataset(Dataset):
     def __init__(self, df, checkpoint=MODEL_CHECKPOINT, max_length=512):
         self.df = df
+        # for a cleaned dataset
         if 'target_relabeled' in df:
             self.labels = df['target_relabeled'].tolist()
         elif 'target' in df:
             self.labels = df['target'].tolist()
+        # for test set without label
         else:
             self.labels = None
-        # self.labels = df['target_relabeled'].tolist() if 'target_relabeled' in df else df['target'].tolist()
 
         # Initialize tokenizer
         self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         self.max_length = max_length
         self.tokenized_data = self.tokenizer.batch_encode_plus(
-            df['text'].tolist(),
+            df['text_cleaned'].tolist(),
             add_special_tokens=True,
             truncation=True,
             max_length=self.max_length,
