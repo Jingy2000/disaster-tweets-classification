@@ -1,6 +1,6 @@
 # Disaster Tweets Classification with BERT
 
-This project aims to classify tweets into disaster-related and non-disaster-related categories. We fine-tuned a BERT model to achieve this task.
+This project aims to classify tweets into disaster-related and non-disaster-related categories. I trained RNNs and fine-tuned a BERT model to achieve this task.
 
 ## Table of Contents
 
@@ -13,7 +13,7 @@ This project aims to classify tweets into disaster-related and non-disaster-rela
 
 ```
 .
-|-- clean data.ipynb: Jupyter notebook for data cleaning and preprocessing.
+|-- clean data.ipynb: Jupyter notebook for data exploring, cleaning and preprocessing.
 |-- data: Directory containing the raw and cleaned datasets.
 |-- main.py: Main script to run the model.
 |-- model: Directory to store trained model checkpoints.
@@ -22,7 +22,7 @@ This project aims to classify tweets into disaster-related and non-disaster-rela
 `-- src: Source code directory.
     |-- config.py: Configuration parameters for the model.
     |-- dataset.py: Dataset preparation and loading utilities.
-    |-- model.py: BERT model definition.
+    |-- model.py: BERT, RNN model definition.
     |-- train.py: Training loop and utilities.
 ```
 
@@ -30,17 +30,22 @@ This project aims to classify tweets into disaster-related and non-disaster-rela
 
 ### Data Preprocessing
 
-In the notebook, I performed various preprocessing steps to make the data suitable for a BERT model. This includes:
+In the notebook, I performed various preprocessing steps to make the data suitable for a language model and explore the dataset. This includes:
 
 - Handling missing values
 - Removing special characters and URLs, expanding contractions
+- Reduced the unknown word rate in embeddings from 45% to 4%.
+
+These preprocessing efforts significantly improve the data quality, paving the way for a robust language model training.
 
 ### Training Strategy
 
 I employed a combination of:
 
-- Monitoring validation loss to explore the hyperparameters, ensuring the model doesn't overfit
-- Using AdamW optimizer, learning rate schedules with warm-up steps, 
+- Monitoring validation loss to explore the hyperparameters, ensuring the model doesn't overfit and  fine-tuning model hyperparameters
+- Using AdamW optimizer, learning rate schedules with warm-up steps.
+- Using pre-trained Glove and Word2Vec embeddings to leverage transfer learning for word embedding.
+- Ensuring efficient RNN training by implementing padding and masking for batch sequences.
 
 ## Results
 
