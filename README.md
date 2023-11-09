@@ -44,7 +44,7 @@ I employed a combination of:
 
 - Monitoring validation loss to explore the hyperparameters, ensuring the model doesn't overfit and  fine-tuning model hyperparameters
 - Using AdamW optimizer, learning rate schedules with warm-up steps.
-- Using pre-trained Glove and Word2Vec embeddings to leverage transfer learning for word embedding.
+- Using pre-trained Glove and Word2Vec embeddings to do transfer learning for word embedding.
 - Ensuring efficient RNN training by implementing padding and masking for batch sequences.
 
 ## Results
